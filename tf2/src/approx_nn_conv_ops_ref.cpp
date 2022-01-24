@@ -231,40 +231,40 @@ public:
 template<class T, class AT>
 class ReferenceApproxConvFunctor<T, AT, TableApproxOpType_t> {
 public:
-    void operator()(OpKernelContext *ctx, const TableApproxOpType_t<CPUDevice, T, AT> &approxOp,
-                    const T *inputData, int inputBatches, int inputHeight, int inputWidth, int inputDepth,
-                    const T *filterData, int filterHeight, int filterWidth, int filterCount,
+    void operator()(OpKernelContext *ctx, TableApproxOpType_t<CPUDevice, T, AT> &approxOp,
+                    const T *inputData, int N, int H, int W, int C,
+                    const T *filterData, int S, int R, int M,
                     int strideRows, int strideCols, Padding padding,
-                    T *outputData, int outputHeight, int outputWidth)
+                    T *outputData, int Q, int P)
     {
         int filterLeftOffset, filterTopOffset;
 
         if(padding == VALID)
         {
-            filterLeftOffset = ((outputWidth - 1)  * strideCols + filterWidth  - inputWidth  + 1) / 2;
-            filterTopOffset  = ((outputHeight - 1) * strideRows + filterHeight - inputHeight + 1) / 2;
+            filterLeftOffset = ((P - 1)  * strideCols + R  - W  + 1) / 2;
+            filterTopOffset  = ((Q - 1) * strideRows + S - H + 1) / 2;
         }
         else
         {
-            filterLeftOffset = ((outputWidth - 1)  * strideCols + filterWidth  - inputWidth)  / 2;
-            filterTopOffset  = ((outputHeight - 1) * strideRows + filterHeight - inputHeight) / 2;
+            filterLeftOffset = ((P - 1)  * strideCols + R  - W)  / 2;
+            filterTopOffset  = ((Q - 1) * strideRows + S - H) / 2;
         }
 
         // Compute filter coefficient sums
 
         // Walk through all 3D images in the batch.
-        for(int batch = 0; batch < inputBatches; ++batch)
+        for(int n = 0; n < N; ++n)
         {
             // Walk through all pixels and channels in the output 3D image.
-            for(int outY = 0; outY < outputHeight; ++outY)
+            for(int q = 0; q < Q; ++q)
             {
-                for(int outX = 0; outX < outputWidth; ++outX)
+                for(int p = 0; p < P; ++p)
                 {
                     // Number of output channels is given by number of specified filters.
-                    for(int outChannel = 0; outChannel < filterCount; ++outChannel)
+                    for(int m = 0; m < M; ++m)
                     {
-                        const int inXOrigin = (outX * strideCols) - filterLeftOffset;
-                        const int inYOrigin = (outY * strideRows) - filterTopOffset;
+                        const int inXOrigin = (p * strideCols) - filterLeftOffset;
+                        const int inYOrigin = (q * strideRows) - filterTopOffset;
 
                         T total(0);
                         T inputPatchTotal(0);
@@ -272,30 +272,34 @@ public:
 
                         // Multiply filter kernel with patch of input image around its current position,
                         // summing the results into current channel of the output pixel.
-                        for(int filterY = 0; filterY < filterHeight; ++filterY)
+                        for(int s = 0; s < S; ++s)
                         {
-                            for(int filterX = 0; filterX < filterWidth; ++filterX)
+                            for(int r = 0; r < R; ++r)
                             {
                                 // Filter has same number of channels as an input image.
-                                for(int inChannel = 0; inChannel < inputDepth; ++inChannel)
+                                for(int c = 0; c < C; ++c)
                                 {
-                                    const int inX = inXOrigin + filterX;
-                                    const int inY = inYOrigin + filterY;
+                                    const int inX = inXOrigin + r;
+                                    const int inY = inYOrigin + s;
 
                                     T inputValue;
 
-                                    if((inX >= 0) && (inX < inputWidth) && (inY >= 0) && (inY < inputHeight))
-                                        inputValue = inputData[(batch * inputHeight * inputWidth * inputDepth) + (inY * inputWidth * inputDepth) + (inX * inputDepth) + inChannel];
+                                    if((inX >= 0) && (inX < W) && (inY >= 0) && (inY < H)) 
+                                        inputValue = inputData[(n * H * W * C) + (inY * W * C) + (inX * C) + c];
                                     else
                                         inputValue = T(0);
 
-                                    const T filterValue = filterData[(filterY * filterWidth * inputDepth * filterCount) + (filterX * inputDepth * filterCount) + (inChannel * filterCount) + outChannel];
+                                    const T filterValue = filterData[(s * R * C * M) + (r * C * M) + (c * M) + m];
 
                                     inputPatchTotal  += inputValue;
                                     filterPatchTotal += filterValue; // TODO: This can be factored out as it should be constant accross all patches
 
                                     // Quantize values and use lookup table to compute the product
-                                    const uint32 inputValueQ  = AT(((inputValue - approxOp.quantProps.input.offset) * approxOp.quantProps.input.invScale) + T(0.5));
+                                    uint32 inputValueQ  = AT(((inputValue - approxOp.quantProps.input.offset) * approxOp.quantProps.input.invScale) + T(0.5));
+                                    for (size_t b = 0; b < approxOp.bitWidth; b++)
+                                        if (approxOp.bernoulli(approxOp.randomEngine))
+                                            inputValueQ ^= uint32(1) << b;
+                                    
                                     const uint32 filterValueQ = AT(((filterValue - approxOp.quantProps.filter.offset) * approxOp.quantProps.filter.invScale) + T(0.5));
                                     const uint32 prodValueQ   = approxOp.lookupTable[(inputValueQ << approxOp.bitWidth) | filterValueQ];
 
@@ -307,8 +311,8 @@ public:
                         total = total * approxOp.quantProps.s1xS2 +
                                 approxOp.quantProps.m2 * inputPatchTotal +
                                 approxOp.quantProps.m1 * filterPatchTotal -
-                                T(filterHeight * filterWidth * inputDepth) * approxOp.quantProps.m1xM2;
-                        outputData[(batch * outputHeight * outputWidth * filterCount) + (outY * outputWidth * filterCount) + (outX * filterCount) + outChannel] = total;
+                                T(S * R * C) * approxOp.quantProps.m1xM2;
+                        outputData[(n * Q * P * M) + (q * P * M) + (p * M) + m] = total;
                     }
                 }
             }

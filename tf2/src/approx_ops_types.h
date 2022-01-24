@@ -12,6 +12,7 @@
 #define APPROX_OPS_TYPES_H
 
 #include <fstream>
+#include <random>
 
 #include <tensorflow/core/framework/op_kernel.h>
 
@@ -101,9 +102,15 @@ struct BaseTableApproxOpType_t {
         , tableFilename("")
         , quantMin(0)
         , quantMax((1 << 8) - 1)
+        , input_ber(0)
     {
         OP_REQUIRES_OK(ctx, ctx->GetAttr("num_bits", &bitWidth));
         OP_REQUIRES_OK(ctx, ctx->GetAttr("mul_map_file", &tableFilename));
+        OP_REQUIRES_OK(ctx, ctx->GetAttr("input_ber", &input_ber));
+
+        std::random_device rd;
+        randomEngine = std::mt19937(rd());
+        bernoulli = std::bernoulli_distribution(input_ber);
 
         quantMax = (1 << bitWidth) - 1;
 
@@ -220,6 +227,9 @@ struct BaseTableApproxOpType_t {
     int quantMin, quantMax;         ///< Min/Max of quantized value (0 - 2^8-1).
     OpQuantProps_t quantProps;      ///< Quantization properties of the inputs.
     std::vector<ATVT> lookupTable;  ///< Approximate OP lookup table data.
+    float input_ber;               ///< Probabilità di flip per ciascun bit
+    std::mt19937 randomEngine;
+    std::bernoulli_distribution bernoulli;
 };
 
 #undef TF_REQUIRES

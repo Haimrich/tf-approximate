@@ -485,7 +485,7 @@ template struct LaunchApproxConv2DOp<CPUDevice, float,       float,       NullAp
 template struct LaunchApproxConv2DOp<CPUDevice, double,      double,      NullApproxOpType_t>;
 }
 
-// Register approximated 2D Convolution with min/max variable inputs on GPU
+// Register approximated 2D Convolution with min/max variable inputs on CPU
 #define REGISTER_CPU(T) \
     REGISTER_KERNEL_BUILDER( \
         Name("ApproxConv2DWithMinMaxVars") \
