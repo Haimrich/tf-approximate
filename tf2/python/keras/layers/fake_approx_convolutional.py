@@ -82,7 +82,9 @@ class _NonAtrousApproxConvolutionWithMinMaxVars(_BaseNonAtrousApproxConvolution)
                  name=None,
                  num_bits=8,
                  mul_map_file='',
-                 input_ber=0):
+                 input_ber=0,
+                 weight_ber=0,
+                 output_ber=0):
         super(_NonAtrousApproxConvolutionWithMinMaxVars, self).__init__(
             input_shape=input_shape,
             filter_shape=filter_shape,
@@ -101,6 +103,8 @@ class _NonAtrousApproxConvolutionWithMinMaxVars(_BaseNonAtrousApproxConvolution)
         self.quantized_filter = None
 
         self.input_ber = input_ber
+        self.weight_ber = weight_ber
+        self.output_ber = output_ber
 
     def set_min_max_vars(self, input_min, input_max, filter_min, filter_max):
         self.input_min = input_min
@@ -125,7 +129,9 @@ class _NonAtrousApproxConvolutionWithMinMaxVars(_BaseNonAtrousApproxConvolution)
             padding=self.padding,
             data_format=self.data_format,
             name=self.name,
-            input_ber=self.input_ber)
+            input_ber=self.input_ber,
+            weight_ber=self.weight_ber,
+            output_ber=self.output_ber)
 
 
 class FakeApproxConvolution2D(nn_ops.Convolution):
@@ -139,7 +145,9 @@ class FakeApproxConvolution2D(nn_ops.Convolution):
                  data_format=None,
                  num_bits=8,
                  mul_map_file='',
-                 input_ber=0):
+                 input_ber=0,
+                 weight_ber=0,
+                 output_ber=0):
 
         self.num_bits = num_bits
         self.mul_map_file = mul_map_file
@@ -151,6 +159,8 @@ class FakeApproxConvolution2D(nn_ops.Convolution):
         self.quantized_filter = None
 
         self.input_ber = input_ber
+        self.weight_ber = weight_ber
+        self.output_ber = output_ber
 
         super(FakeApproxConvolution2D, self).__init__(
             input_shape=input_shape,
@@ -177,7 +187,9 @@ class FakeApproxConvolution2D(nn_ops.Convolution):
             name=self.name,
             num_bits=self.num_bits,
             mul_map_file=self.mul_map_file,
-            input_ber=self.input_ber)
+            input_ber=self.input_ber,
+            weight_ber=self.weight_ber,
+            output_ber=self.output_ber)
 
         return conv_op
 
@@ -203,11 +215,16 @@ class FakeApproxConv2D(Conv):
                  num_bits=8,
                  mul_map_file='',
                  input_ber=0,
+                 weight_ber=0,
+                 output_ber=0,
                  **kwargs):
 
         self.num_bits = num_bits
         self.mul_map_file = mul_map_file
+
         self.input_ber = input_ber
+        self.weight_ber = weight_ber
+        self.output_ber = output_ber
 
         super(FakeApproxConv2D, self).__init__(
             rank=2,
@@ -264,7 +281,9 @@ class FakeApproxConv2D(Conv):
                                                            self.rank + 2),
                 num_bits=self.num_bits,
                 mul_map_file=self.mul_map_file,
-                input_ber=self.input_ber)
+                input_ber=self.input_ber,
+                weight_ber=self.weight_ber,
+                output_ber=self.output_ber)
 
         # Set additional inputs used by inner convolution operation
         self._convolution_op.set_min_max_vars(input_min, input_max, kernel_min, kernel_max)

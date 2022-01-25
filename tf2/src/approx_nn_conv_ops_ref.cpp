@@ -296,12 +296,22 @@ public:
 
                                     // Quantize values and use lookup table to compute the product
                                     uint32 inputValueQ  = AT(((inputValue - approxOp.quantProps.input.offset) * approxOp.quantProps.input.invScale) + T(0.5));
-                                    for (size_t b = 0; b < approxOp.bitWidth; b++)
-                                        if (approxOp.bernoulli(approxOp.randomEngine))
-                                            inputValueQ ^= uint32(1) << b;
+                                    if (approxOp.input_ber > 0.0)
+                                        for (size_t b = 0; b < approxOp.bitWidth; b++)
+                                            if (approxOp.bernoulliInput(approxOp.randomEngineInput))
+                                                inputValueQ ^= uint32(1) << b;
                                     
-                                    const uint32 filterValueQ = AT(((filterValue - approxOp.quantProps.filter.offset) * approxOp.quantProps.filter.invScale) + T(0.5));
-                                    const uint32 prodValueQ   = approxOp.lookupTable[(inputValueQ << approxOp.bitWidth) | filterValueQ];
+                                    uint32 filterValueQ = AT(((filterValue - approxOp.quantProps.filter.offset) * approxOp.quantProps.filter.invScale) + T(0.5));
+                                    if (approxOp.weight_ber > 0.0)
+                                        for (size_t b = 0; b < approxOp.bitWidth; b++)
+                                            if (approxOp.bernoulliWeight(approxOp.randomEngineWeight))
+                                                filterValueQ ^= uint32(1) << b;
+                                    
+                                    uint32 prodValueQ   = approxOp.lookupTable[(inputValueQ << approxOp.bitWidth) | filterValueQ];
+                                    if (approxOp.output_ber > 0.0)
+                                        for (size_t b = 0; b < approxOp.bitWidth*2; b++)
+                                            if (approxOp.bernoulliOutput(approxOp.randomEngineOutput))
+                                                prodValueQ ^= uint32(1) << b;
 
                                     total += T(prodValueQ);
                                 }

@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  tfapprox:
+    image: dnnapprox
+    build: .
+    volumes:
+      - ./tf2/test:/app/test
+      - ./tf2/examples:/app/examples
+    stdin_open: true
+    tty: true

@@ -102,15 +102,9 @@ struct BaseTableApproxOpType_t {
         , tableFilename("")
         , quantMin(0)
         , quantMax((1 << 8) - 1)
-        , input_ber(0)
     {
         OP_REQUIRES_OK(ctx, ctx->GetAttr("num_bits", &bitWidth));
         OP_REQUIRES_OK(ctx, ctx->GetAttr("mul_map_file", &tableFilename));
-        OP_REQUIRES_OK(ctx, ctx->GetAttr("input_ber", &input_ber));
-
-        std::random_device rd;
-        randomEngine = std::mt19937(rd());
-        bernoulli = std::bernoulli_distribution(input_ber);
 
         quantMax = (1 << bitWidth) - 1;
 
@@ -126,6 +120,21 @@ struct BaseTableApproxOpType_t {
         {
             OP_REQUIRES_OK(ctx, LoadLookupTable(ctx, tableFilename));
         }
+
+        // Bitflips
+        input_ber = weight_ber = output_ber = 0;
+
+        OP_REQUIRES_OK(ctx, ctx->GetAttr("input_ber", &input_ber));
+        OP_REQUIRES_OK(ctx, ctx->GetAttr("weight_ber", &weight_ber));
+        OP_REQUIRES_OK(ctx, ctx->GetAttr("output_ber", &output_ber));
+
+        std::random_device rd;
+        randomEngineInput = std::mt19937(rd());
+        randomEngineWeight = std::mt19937(rd());
+        randomEngineOutput = std::mt19937(rd());
+        bernoulliInput = std::bernoulli_distribution(input_ber);
+        bernoulliWeight = std::bernoulli_distribution(weight_ber);
+        bernoulliOutput = std::bernoulli_distribution(output_ber);
     }
 
     virtual ~BaseTableApproxOpType_t() {
@@ -227,9 +236,12 @@ struct BaseTableApproxOpType_t {
     int quantMin, quantMax;         ///< Min/Max of quantized value (0 - 2^8-1).
     OpQuantProps_t quantProps;      ///< Quantization properties of the inputs.
     std::vector<ATVT> lookupTable;  ///< Approximate OP lookup table data.
-    float input_ber;               ///< Probabilità di flip per ciascun bit
-    std::mt19937 randomEngine;
-    std::bernoulli_distribution bernoulli;
+
+    // Bitflips
+
+    float input_ber, weight_ber, output_ber;  
+    std::mt19937 randomEngineInput, randomEngineWeight, randomEngineOutput;
+    std::bernoulli_distribution bernoulliInput, bernoulliWeight, bernoulliOutput;
 };
 
 #undef TF_REQUIRES

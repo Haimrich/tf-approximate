@@ -52,4 +52,6 @@ REGISTER_OP("ApproxConv2DWithMinMaxVars")
     .Attr(GetConvnetDataFormatAttrString())
     .Attr("dilations: list(int) = [1, 1, 1, 1]")
     .Attr("input_ber: float")
+    .Attr("weight_ber: float")
+    .Attr("output_ber: float")
     .SetShapeFn(shape_inference::Conv2DShapeWithExplicitPadding);

@@ -50,9 +50,9 @@ y_train = y_train[:-10000]
 # NOTE: Conv2D layers are replaced with our FakeApproxConv2D which simulates convolutional layer with approximate
 #       8bit fixed-point multiplication.
 approx_model = tf.keras.Sequential([
-    FakeApproxConv2D(filters=6, kernel_size=(3, 3), activation='relu', mul_map_file=args.mtab_file),
+    FakeApproxConv2D(filters=6, kernel_size=(3, 3), activation='relu', mul_map_file=args.mtab_file, input_ber=1e-3, weight_ber=1e-3, output_ber=0),
     tf.keras.layers.AveragePooling2D(),
-    FakeApproxConv2D(filters=16, kernel_size=(3, 3), activation='relu', mul_map_file=args.mtab_file),
+    FakeApproxConv2D(filters=16, kernel_size=(3, 3), activation='relu', mul_map_file=args.mtab_file, input_ber=1e-3, weight_ber=1e-3, output_ber=0),
     tf.keras.layers.Flatten(),
     tf.keras.layers.Dense(120, activation='relu'),
     tf.keras.layers.Dense(84, activation='relu'),
@@ -73,6 +73,6 @@ approx_model.load_weights('lenet5_weights')
 
 print('================================================================================')
 print('Testing approximate model with {}'.format(args.mtab_file))
-score = approx_model.evaluate(x_test, y_test, verbose=0)
+score = approx_model.evaluate(x_test, y_test, verbose=1)
 print('Test loss:', score[0])
 print('Test accuracy:', score[1])

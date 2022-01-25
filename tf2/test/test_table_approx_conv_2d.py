@@ -46,7 +46,8 @@ class TestApproxConv2D(object):
         self.output_ref_tensor = tf.nn.conv2d(input_tensor_quant, filter_tensor_quant, self.stride, 'SAME')
         self.output_tensor = self.test_op_module.approx_conv2d_with_min_max_vars(input_tensor_quant, filter_tensor_quant,
                                                                                  *self.input_bound_tensors, *self.filter_bound_tensors,
-                                                                                 self.stride, 8, approx_mul_file, 'SAME', 1)
+                                                                                 self.stride, 8, approx_mul_file, 'SAME', 
+                                                                                 input_ber=1e-3, weight_ber=1e-3, output_ber=1e-3)
 
     def run(self, device):
         with tf.device('/{}'.format(device)):
