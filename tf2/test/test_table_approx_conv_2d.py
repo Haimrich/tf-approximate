@@ -47,7 +47,7 @@ class TestApproxConv2D(object):
         self.output_tensor = self.test_op_module.approx_conv2d_with_min_max_vars(input_tensor_quant, filter_tensor_quant,
                                                                                  *self.input_bound_tensors, *self.filter_bound_tensors,
                                                                                  self.stride, 8, approx_mul_file, 'SAME', 
-                                                                                 input_ber=1e-3, weight_ber=1e-3, output_ber=1e-3)
+                                                                                 input_ber=0, weight_ber=0, output_ber=0)
 
     def run(self, device):
         with tf.device('/{}'.format(device)):
@@ -72,5 +72,9 @@ if __name__ == '__main__':
 
     test_op_module = tf.load_op_library('libApproxGPUOpsTF.so')
 
-    test = TestApproxConv2D(test_op_module, [1, 256, 256, 1], [8, 8, 1, 1], [1, 1, 1, 1])
+    #                                        N  W  H  C    R  S  M  G    Strides
+    #test = TestApproxConv2D(test_op_module, [1, 8, 8, 1], [4, 4, 1, 1], [1, 1, 1, 1])
+    test = TestApproxConv2D(test_op_module, [1, 56, 56, 256], [3, 3, 256, 256], [1, 1, 1, 1])
+    #test = TestApproxConv2D(test_op_module, [1, 256, 256, 1], [8, 8, 1, 1], [1, 1, 1, 1])
+
     test.run(args.device)

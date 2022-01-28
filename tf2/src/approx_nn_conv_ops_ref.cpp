@@ -19,7 +19,11 @@ limitations under the License.
 
 #include <tensorflow/core/util/padding.h>
 
+#include <chrono>
+
 #include "approx_ops_types.h"
+
+#include "simulation.hpp"
 
 using namespace tensorflow;
 using CPUDevice = Eigen::ThreadPoolDevice;
@@ -250,8 +254,91 @@ public:
             filterTopOffset  = ((Q - 1) * strideRows + S - H) / 2;
         }
 
-        // Compute filter coefficient sums
+        auto startTime = std::chrono::high_resolution_clock::now();
 
+#ifndef ORIGINAL
+        std::cout << "N: " << N << " - C: " << C << " - M: " << M << " - P: " << P << " - Q: " << Q << " - R: " << R << " - S: " << S << " - W: " << W << " - H: " << H << std::endl;
+
+        // Zeroing partial sums
+        for(int n = 0; n < N; ++n)
+            for(int q = 0; q < Q; ++q)
+                for(int p = 0; p < P; ++p)
+                    for(int m = 0; m < M; ++m)
+                        outputData[(n * Q * P * M) + (q * P * M) + (p * M) + m] = 0;
+
+        Simulation sim("/app/tf2/test/loopnest4.txt");
+        
+        bool exit = false;
+        while (!exit)
+        {    
+            //sim.UpdateDimensionIndexes();
+            // BEGIN LOOP BODY
+
+            int inXOrigin = (sim.dimIdx[Dim::P] * strideCols) - filterLeftOffset;
+            int inYOrigin = (sim.dimIdx[Dim::Q] * strideRows) - filterTopOffset;
+            int w = inXOrigin + sim.dimIdx[Dim::R];
+            int h = inYOrigin + sim.dimIdx[Dim::S];
+
+            T inputValue;
+            if(w >= 0 && w < W && h >= 0 && h < H) 
+                inputValue = inputData[(sim.dimIdx[Dim::N] * H * W * C) + (h * W * C) + (w * C) + sim.dimIdx[Dim::C]];
+            else
+                inputValue = T(0);
+
+            const T filterValue = filterData[(sim.dimIdx[Dim::S] * R * C * M) + (sim.dimIdx[Dim::R] * C * M) + (sim.dimIdx[Dim::C] * M) + sim.dimIdx[Dim::M]];
+
+            uint32 inputValueQ  = AT(((inputValue - approxOp.quantProps.input.offset) * approxOp.quantProps.input.invScale) + T(0.5));
+            
+            uint32 filterValueQ = AT(((filterValue - approxOp.quantProps.filter.offset) * approxOp.quantProps.filter.invScale) + T(0.5));
+            
+            uint32 prodValueQ   = approxOp.lookupTable[(inputValueQ << approxOp.bitWidth) | filterValueQ];
+
+            int outIdx = (sim.dimIdx[Dim::N] * Q * P * M) + (sim.dimIdx[Dim::Q] * P * M) + (sim.dimIdx[Dim::P] * M) + sim.dimIdx[Dim::M];
+            outputData[outIdx] += T(prodValueQ);
+            //std::cout << "N: " << sim.dimIdx[Dim::N] << " - Q: " << sim.dimIdx[Dim::Q] << " - P: " << sim.dimIdx[Dim::P] << " - M: " << sim.dimIdx[Dim::M] << std::endl;
+            
+            // END LOOP BODY
+
+            exit = sim.Next();
+        }
+
+        // Output normalization
+        for(int n = 0; n < N; ++n)
+            for(int q = 0; q < Q; ++q)
+                for(int p = 0; p < P; ++p)
+                    for(int m = 0; m < M; ++m)
+                    {
+                        const int inXOrigin = (p * strideCols) - filterLeftOffset;
+                        const int inYOrigin = (q * strideRows) - filterTopOffset;
+
+                        T inputPatchTotal(0);
+                        T filterPatchTotal(0);
+
+                        for(int s = 0; s < S; ++s)
+                            for(int r = 0; r < R; ++r)
+                                for(int c = 0; c < C; ++c)
+                                {
+                                    const int inX = inXOrigin + r;
+                                    const int inY = inYOrigin + s;
+
+                                    T inputValue;
+
+                                    if((inX >= 0) && (inX < W) && (inY >= 0) && (inY < H)) 
+                                        inputValue = inputData[(n * H * W * C) + (inY * W * C) + (inX * C) + c];
+                                    else
+                                        inputValue = T(0);
+
+                                    const T filterValue = filterData[(s * R * C * M) + (r * C * M) + (c * M) + m];
+
+                                    inputPatchTotal  += inputValue;
+                                    filterPatchTotal += filterValue;
+                                }
+                        
+                        int outIdx = (n * Q * P * M) + (q * P * M) + (p * M) + m;
+                        outputData[outIdx] = outputData[outIdx] * approxOp.quantProps.s1xS2 + approxOp.quantProps.m2 * inputPatchTotal + approxOp.quantProps.m1 * filterPatchTotal - T(S * R * C) * approxOp.quantProps.m1xM2;
+                    }
+
+#else
         // Walk through all 3D images in the batch.
         for(int n = 0; n < N; ++n)
         {
@@ -327,6 +414,12 @@ public:
                 }
             }
         }
+        
+#endif
+
+        auto currentTime = std::chrono::high_resolution_clock::now();
+        auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count();
+        std::cout << "Elapsed Time: " << elapsedTime << " ms " << std::endl;
     }
 };
 

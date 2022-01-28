@@ -10,3 +10,4 @@ cpu/axqconv/tables
 cpu/axqconv/tune
 cpu/axqconv/*.o
 .DS_Store
+tf2/build

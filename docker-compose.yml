@@ -5,7 +5,7 @@ services:
     image: dnnapprox
     build: .
     volumes:
-      - ./tf2/test:/app/test
-      - ./tf2/examples:/app/examples
+      - ./tf2:/app/tf2
     stdin_open: true
     tty: true
+    user: "0:998"
