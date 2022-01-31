@@ -1,0 +1,5 @@
+GlobalBuffer        R:1e-3      W:1e-5
+PEInputBuffer       R:1e-3      W:1e-5
+PEWeightBuffer      R:1e-3      W:1e-5
+PEAccuBuffer        R:1e-3      W:1e-5
+PEWeightRegs        R:1e-3      W:1e-5

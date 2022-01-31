@@ -266,7 +266,7 @@ public:
                     for(int m = 0; m < M; ++m)
                         outputData[(n * Q * P * M) + (q * P * M) + (p * M) + m] = 0;
 
-        Simulation sim("/app/tf2/test/loopnest4.txt");
+        Simulation sim("/app/tf2/test/loopnest4.txt", "/app/tf2/test/bers4.txt");
         
         bool exit = false;
         while (!exit)
@@ -288,10 +288,13 @@ public:
             const T filterValue = filterData[(sim.dimIdx[Dim::S] * R * C * M) + (sim.dimIdx[Dim::R] * C * M) + (sim.dimIdx[Dim::C] * M) + sim.dimIdx[Dim::M]];
 
             uint32 inputValueQ  = AT(((inputValue - approxOp.quantProps.input.offset) * approxOp.quantProps.input.invScale) + T(0.5));
-            
+            inputValueQ ^= sim.GetError(Datatype::INPUTS);
+
             uint32 filterValueQ = AT(((filterValue - approxOp.quantProps.filter.offset) * approxOp.quantProps.filter.invScale) + T(0.5));
-            
+            filterValueQ ^= sim.GetError(Datatype::WEIGHTS);
+
             uint32 prodValueQ   = approxOp.lookupTable[(inputValueQ << approxOp.bitWidth) | filterValueQ];
+            prodValueQ ^= sim.GetError(Datatype::OUTPUTS);
 
             int outIdx = (sim.dimIdx[Dim::N] * Q * P * M) + (sim.dimIdx[Dim::Q] * P * M) + (sim.dimIdx[Dim::P] * M) + sim.dimIdx[Dim::M];
             outputData[outIdx] += T(prodValueQ);

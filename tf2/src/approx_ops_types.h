@@ -16,6 +16,7 @@
 
 #include <tensorflow/core/framework/op_kernel.h>
 
+#undef EIGEN_STACK_ALLOCATION_LIMIT
 #define EIGEN_STACK_ALLOCATION_LIMIT 0
 #define EIGEN_USE_THREADS
 #include "third_party/eigen3/unsupported/Eigen/CXX11/Tensor"
