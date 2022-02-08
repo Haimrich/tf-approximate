@@ -81,7 +81,10 @@ class _NonAtrousApproxConvolutionWithMinMaxVars(_BaseNonAtrousApproxConvolution)
                  strides=None,
                  name=None,
                  num_bits=8,
-                 mul_map_file=''):
+                 mul_map_file='',
+                 buffer_bers=(0,0,0),
+                 network_bers=(0,0,0),
+                 network_bits=(0,0,0)):
         super(_NonAtrousApproxConvolutionWithMinMaxVars, self).__init__(
             input_shape=input_shape,
             filter_shape=filter_shape,
@@ -98,6 +101,10 @@ class _NonAtrousApproxConvolutionWithMinMaxVars(_BaseNonAtrousApproxConvolution)
         self.filter_min = None
         self.filter_max = None
         self.quantized_filter = None
+
+        self.buffer_bers = buffer_bers
+        self.network_bers = network_bers
+        self.network_bits = network_bits
 
     def set_min_max_vars(self, input_min, input_max, filter_min, filter_max):
         self.input_min = input_min
@@ -121,7 +128,10 @@ class _NonAtrousApproxConvolutionWithMinMaxVars(_BaseNonAtrousApproxConvolution)
             mul_map_file=self.mul_map_file,
             padding=self.padding,
             data_format=self.data_format,
-            name=self.name)
+            name=self.name,
+            buffer_bers=self.buffer_bers,
+            network_bers=self.network_bers,
+            network_bits=self.network_bits)
 
 
 class FakeApproxConvolution2D(nn_ops.Convolution):
@@ -134,7 +144,10 @@ class FakeApproxConvolution2D(nn_ops.Convolution):
                  name=None,
                  data_format=None,
                  num_bits=8,
-                 mul_map_file=''):
+                 mul_map_file='',
+                 buffer_bers=(0,0,0),
+                 network_bers=(0,0,0),
+                 network_bits=(0,0,0)):
         self.num_bits = num_bits
         self.mul_map_file = mul_map_file
 
@@ -143,6 +156,10 @@ class FakeApproxConvolution2D(nn_ops.Convolution):
         self.filter_min = None
         self.filter_max = None
         self.quantized_filter = None
+
+        self.buffer_bers = buffer_bers
+        self.network_bers = network_bers
+        self.network_bits = network_bits
 
         super(FakeApproxConvolution2D, self).__init__(
             input_shape=input_shape,
@@ -168,7 +185,10 @@ class FakeApproxConvolution2D(nn_ops.Convolution):
             strides=self.strides,
             name=self.name,
             num_bits=self.num_bits,
-            mul_map_file=self.mul_map_file)
+            mul_map_file=self.mul_map_file,
+            buffer_bers=self.buffer_bers,
+            network_bers=self.network_bers,
+            network_bits=self.network_bits)
 
         return conv_op
 
@@ -193,9 +213,16 @@ class FakeApproxConv2D(Conv):
                  bias_constraint=None,
                  num_bits=8,
                  mul_map_file='',
+                 buffer_bers=(0,0,0),
+                 network_bers=(0,0,0),
+                 network_bits=(0,0,0),
                  **kwargs):
         self.num_bits = num_bits
         self.mul_map_file = mul_map_file
+
+        self.buffer_bers = buffer_bers
+        self.network_bers = network_bers
+        self.network_bits = network_bits
 
         super(FakeApproxConv2D, self).__init__(
             rank=2,
@@ -251,7 +278,10 @@ class FakeApproxConv2D(Conv):
                 data_format=conv_utils.convert_data_format(self.data_format,
                                                            self.rank + 2),
                 num_bits=self.num_bits,
-                mul_map_file=self.mul_map_file)
+                mul_map_file=self.mul_map_file,
+                buffer_bers=self.buffer_bers,
+                network_bers=self.network_bers,
+                network_bits=self.network_bits)
 
         # Set additional inputs used by inner convolution operation
         self._convolution_op.set_min_max_vars(input_min, input_max, kernel_min, kernel_max)

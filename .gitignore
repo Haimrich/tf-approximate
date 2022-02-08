@@ -9,3 +9,4 @@ cpu/axqconv/axqconv.so
 cpu/axqconv/tables
 cpu/axqconv/tune
 cpu/axqconv/*.o
+build/

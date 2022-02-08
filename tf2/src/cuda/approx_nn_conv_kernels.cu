@@ -13,6 +13,10 @@
 #include "gpu_kernel_helper.h"
 #include "approx_nn_conv_kernels.h"
 
+#include <cuda.h>
+#include <curand_kernel.h>
+#include <math.h>
+
 #define gpuErrchk(ans) { gpuAssert((ans), __FILE__, __LINE__); }
 inline void gpuAssert(cudaError_t code, const char *file, int line, bool abort=true)
 {
@@ -29,6 +33,20 @@ using GPUDevice = Eigen::GpuDevice;
 
 #define TILE_DIM 8
 
+
+// Random Generator State Init Kernel
+__global__ void RandomSetupKernel(curandState* state, const int seed, const int totalThreads)
+{
+    int blockId = blockIdx.x + blockIdx.y * gridDim.x;
+    int id = blockId * (blockDim.x * blockDim.y) + (threadIdx.y * blockDim.x) + threadIdx.x;
+    
+    for (int i = 0; i < 7; i++) {
+        int stateId = i*totalThreads + id;
+        curand_init((seed << 20) + stateId, 0, 0, &state[stateId]);
+    }
+}
+
+#if true
 //----------------------------------------------------------------------------//
 // Non-approximated kernels
 //----------------------------------------------------------------------------//
@@ -279,6 +297,8 @@ template struct ApproxFilterCorrCoeff<GPUDevice, Eigen::half, Eigen::half, NullA
 template struct ApproxFilterCorrCoeff<GPUDevice, float,       float,       NullApproxOpType_t>;
 template struct ApproxFilterCorrCoeff<GPUDevice, double,      double,      NullApproxOpType_t>;
 
+#endif
+
 //----------------------------------------------------------------------------//
 // Lookup table approximate kernels (8-bit inputs)
 //----------------------------------------------------------------------------//
@@ -309,7 +329,11 @@ template<typename T, typename AT>
 __global__ void ApproxGemmCudaKernelCombined(size_t m, size_t n, size_t k,
                                              const T *a, size_t lda, const T *b, size_t ldb,
                                              cudaTextureObject_t lookupTable,
-                                             T *c, size_t ldc, const GpuOpQuantProps_t<T, AT> quantProps);
+                                             T *c, size_t ldc, const GpuOpQuantProps_t<T, AT> quantProps,
+                                             curandState* state, const float weightSer, const float inputSer, const float outputSer,
+                                             const float weightNetworkSer, const float inputNetworkSer, const float outputNetworkSer,
+                                             const int weightNetworkBits, const int inputNetworkBits, const int outputNetworkBits,
+                                             const int totalThreads);
 
 template<typename T, typename AT>
 struct ApproxConvGEMMKernelCombined<GPUDevice, T, AT, TableApproxOpType_t> {
@@ -332,13 +356,41 @@ void ApproxConvGEMMKernelCombined<GPUDevice, T, AT, TableApproxOpType_t>::operat
     dim3 gridSize((n + blockSize.x - 1) / blockSize.x, (m + blockSize.y - 1) / blockSize.y, 1);
     
     cudaTextureObject_t lookupTableTexObj = 0;
-    
+
+    const int totalThreads = blockSize.x  * blockSize.y * gridSize.x * gridSize.y;
+    //std::cout << "THREADS: " << totalThreads << std::endl;
+
+    // Random state init
+    curandState* devStates;
+    cudaMalloc((void **)&devStates, totalThreads * 7 * sizeof(curandState));
+
+    RandomSetupKernel<<<gridSize, blockSize>>>(devStates, 123, totalThreads);
+    //std::cout << "RANDOM Fatto. " << std::endl;
+
+    float weightSer = 1 - std::pow(1 - approxOp.buffer_bers[0], 8);
+    float inputSer = 1 - std::pow(1 - approxOp.buffer_bers[1], 8);
+    float outputSer = 1 - std::pow(1 - approxOp.buffer_bers[2], 24);
+
+    int weightNetworkBits = approxOp.network_bits[0];
+    int inputNetworkBits = approxOp.network_bits[1];
+    int outputNetworkBits = approxOp.network_bits[2];
+
+    float weightNetworkSer = 1 - std::pow(1 - approxOp.network_bers[0], weightNetworkBits);
+    float inputNetworkSer = 1 - std::pow(1 - approxOp.network_bers[1], inputNetworkBits);
+    float outputNetworkSer = 1 - std::pow(1 - approxOp.network_bers[2], outputNetworkBits);
+
     ApproxGemmCudaKernelCombined<T, AT>
         <<<gridSize, blockSize, 0, d.stream()>>>(m, n, k, 
                                                  a, lda, 
                                                  b, ldb, 
                                                  lookupTableTexObj,
-                                                 c, ldc, approxOp.quantProps);
+                                                 c, ldc, approxOp.quantProps,
+                                                 devStates, weightSer, inputSer, outputSer,
+                                                 weightNetworkSer, inputNetworkSer, outputNetworkSer,
+                                                 weightNetworkBits, inputNetworkBits, outputNetworkBits,
+                                                 totalThreads);
+    // Free random state
+    cudaFree(devStates);
 }
 
 template struct ApproxConvGEMMKernelCombined<GPUDevice, float, uint8, TableApproxOpType_t>;
@@ -347,8 +399,21 @@ template<typename T, typename AT>
 __global__ void ApproxGemmCudaKernelCombined(size_t m, size_t n, size_t k,
                                              const T *a, size_t lda, const T *b, size_t ldb,
                                              cudaTextureObject_t lookupTable,
-                                             T *c, size_t ldc, const GpuOpQuantProps_t<T, AT> quantProps)
+                                             T *c, size_t ldc, const GpuOpQuantProps_t<T, AT> quantProps,
+                                             curandState* state, const float weightSer, const float inputSer, const float outputSer,
+                                             const float weightNetworkSer, const float inputNetworkSer, const float outputNetworkSer,
+                                             const int weightNetworkBits, const int inputNetworkBits, const int outputNetworkBits,
+                                             const int totalThreads)
 {
+    int blockId = blockIdx.x + blockIdx.y * gridDim.x;
+    int threadId = blockId * (blockDim.x * blockDim.y) + (threadIdx.y * blockDim.x) + threadIdx.x;
+
+    curandState localState[7];
+    for (int i = 0; i < 7; i++) {
+       int stateId = i * totalThreads + threadId;
+       localState[i] = state[stateId];
+    }
+
     T value(0);
 
     int Row = blockIdx.y*TILE_DIM + threadIdx.y;
@@ -359,22 +424,43 @@ __global__ void ApproxGemmCudaKernelCombined(size_t m, size_t n, size_t k,
 
     for (int i = 0; i < (TILE_DIM + k - 1)/TILE_DIM; ++i) {
 
-         if (i*TILE_DIM + threadIdx.x < k && Row < m)
-             As[threadIdx.y][threadIdx.x] = AT((a[Row*lda + i*TILE_DIM + threadIdx.x] - quantProps.input.offset) * quantProps.input.invScale + T(0.5));
-         else
+         if (i*TILE_DIM + threadIdx.x < k && Row < m)  {
+            As[threadIdx.y][threadIdx.x] = AT((a[Row*lda + i*TILE_DIM + threadIdx.x] - quantProps.input.offset) * quantProps.input.invScale + T(0.5)); 
+         } else {
              As[threadIdx.y][threadIdx.x] = 0;
+         }
 
-         if (i*TILE_DIM + threadIdx.y < k && Col < n)
-             Bs[threadIdx.y][threadIdx.x] = AT((b[(i*TILE_DIM + threadIdx.y)*ldb + Col] - quantProps.filter.offset) * quantProps.filter.invScale + T(0.5));
-         else
+         if (i*TILE_DIM + threadIdx.y < k && Col < n) {
+            Bs[threadIdx.y][threadIdx.x] = AT((b[(i*TILE_DIM + threadIdx.y)*ldb + Col] - quantProps.filter.offset) * quantProps.filter.invScale + T(0.5));
+         } else {
              Bs[threadIdx.y][threadIdx.x] = 0;
+         }
 
          __syncthreads();
 
          for (int n = 0; n < TILE_DIM; ++n)
          {
-             uint tableFetchIdx = (As[threadIdx.y][n] << 8) | Bs[n][threadIdx.x];
-             value += float(tex1Dfetch<ushort>(lookupTable, tableFetchIdx));
+            uint input = As[threadIdx.y][n];
+            if (inputSer > 0) if (curand_uniform(&localState[1]) < inputSer)
+                input ^= 1U << (curand(&localState[6]) % 8); 
+            if (inputNetworkSer > 0) if (curand_uniform(&localState[4]) < inputNetworkSer)
+                input ^= 1U << (curand(&localState[6]) % inputNetworkBits);
+            
+            uint weight = Bs[n][threadIdx.x];
+            if (weightSer > 0) if (curand_uniform(&localState[0]) < weightSer)
+                weight ^= 1U << (curand(&localState[6]) % 8); 
+            if (weightNetworkSer > 0) if (curand_uniform(&localState[3]) < weightNetworkSer)
+                weight ^= 1U << (curand(&localState[6]) % weightNetworkBits); 
+
+             uint tableFetchIdx = (input << 8) | weight;
+
+             ushort result = tex1Dfetch<ushort>(lookupTable, tableFetchIdx);
+             if (outputSer > 0) if (curand_uniform(&localState[2]) < outputSer)
+                result ^= 1U << (curand(&localState[6]) % 24);
+             if (outputNetworkSer > 0) if (curand_uniform(&localState[5]) < outputNetworkSer)
+                result ^= 1U << (curand(&localState[6]) % outputNetworkBits); 
+
+             value += float(result);
          }
 
          __syncthreads();
@@ -391,6 +477,11 @@ __global__ void ApproxGemmCudaKernelCombined(size_t m, size_t n, size_t k,
         c[((blockIdx.y * blockDim.y  + threadIdx.y)*ldc) +
            (blockIdx.x * blockDim.x) + threadIdx.x] = value;
     }
+
+    for (int i = 0; i < 7; i++) {
+       int stateId = i * totalThreads + threadId;
+       state[stateId] = localState[i];
+    }
 }
 
 // Approximated GEMM
@@ -400,7 +491,11 @@ __global__ void ApproxGemmCudaKernel(int m, int n, int k,
     const T *b, int ldb,
     cudaTextureObject_t lookupTable,
     const T *patchSums, const T *filterSums,
-    T *c, int ldc, const GpuOpQuantProps_t<T, AT> quantProps);
+    T *c, int ldc, const GpuOpQuantProps_t<T, AT> quantProps,
+    curandState* state, const float weightSer, const float inputSer, const float outputSer,
+    const float weightNetworkSer, const float inputNetworkSer, const float outputNetworkSer,
+    const int weightNetworkBits, const int inputNetworkBits, const int outputNetworkBits,
+    const int totalThreads);
 
 template<typename T, typename AT>
 struct ApproxConvGEMMKernel<Eigen::GpuDevice, T, AT, TableApproxOpType_t> {
@@ -426,13 +521,42 @@ void ApproxConvGEMMKernel<Eigen::GpuDevice, T, AT, TableApproxOpType_t>::operato
     
     //std::cout << "TEX: " << approxOp.GetLookupData() << std::endl;
     
-    ApproxGemmCudaKernel<T, AT>
+    const int totalThreads = blockSize.x  * blockSize.y * gridSize.x * gridSize.y;
+    std::cout << "THREADS: " << totalThreads << std::endl;
+
+    // Random state init
+    curandState* devStates;
+    cudaMalloc((void **)&devStates, totalThreads * 7 * sizeof(curandState));
+
+    RandomSetupKernel<<<gridSize, blockSize>>>(devStates, 123, totalThreads);
+    std::cout << "RANDOM Fatto. " << std::endl;
+
+    float weightSer = 1 - std::pow(1 - approxOp.buffer_bers[0], 8);
+    float inputSer = 1 - std::pow(1 - approxOp.buffer_bers[1], 8);
+    float outputSer = 1 - std::pow(1 - approxOp.buffer_bers[2], 24);
+
+    int weightNetworkBits = approxOp.network_bits[0];
+    int inputNetworkBits = approxOp.network_bits[1];
+    int outputNetworkBits = approxOp.network_bits[2];
+
+    float weightNetworkSer = 1 - std::pow(1 - approxOp.network_bers[0], weightNetworkBits);
+    float inputNetworkSer = 1 - std::pow(1 - approxOp.network_bers[1], inputNetworkBits);
+    float outputNetworkSer = 1 - std::pow(1 - approxOp.network_bers[2], outputNetworkBits);
+    
+     ApproxGemmCudaKernel<T, AT>
         <<<gridSize, blockSize, 0, d.stream()>>>(m, n, k, 
                                                  a, lda, 
                                                  b, ldb, 
                                                  approxOp.GetLookupData(),
                                                  aCoeffs, bCoeffs,
-                                                 c, ldc, approxOp.quantProps);
+                                                 c, ldc, approxOp.quantProps,
+                                                 devStates, weightSer, inputSer, outputSer,
+                                                 weightNetworkSer, inputNetworkSer, outputNetworkSer,
+                                                 weightNetworkBits, inputNetworkBits, outputNetworkBits,
+                                                 totalThreads);
+
+    // Free random state
+    cudaFree(devStates);
 }
 
 template<typename T, typename AT>
@@ -441,9 +565,22 @@ __global__ void ApproxGemmCudaKernel(int m, int n, int k,
     const T *b, int ldb,
     cudaTextureObject_t lookupTable,
     const T *patchSums, const T *filterSums,
-    T *c, int ldc, const GpuOpQuantProps_t<T, AT> quantProps)
+    T *c, int ldc, const GpuOpQuantProps_t<T, AT> quantProps,
+    curandState* state, const float weightSer, const float inputSer, const float outputSer,
+    const float weightNetworkSer, const float inputNetworkSer, const float outputNetworkSer,
+    const int weightNetworkBits, const int inputNetworkBits, const int outputNetworkBits,
+    const int totalThreads)
 {
-    T value = T(0);
+    int blockId = blockIdx.x + blockIdx.y * gridDim.x;
+    int threadId = blockId * (blockDim.x * blockDim.y) + (threadIdx.y * blockDim.x) + threadIdx.x;
+
+    curandState localState[7];
+    for (int i = 0; i < 7; i++) {
+       int stateId = i * totalThreads + threadId;
+       localState[i] = state[stateId];
+    }
+
+    T value(0);
 
     int Row = blockIdx.y*TILE_DIM + threadIdx.y;
     int Col = blockIdx.x*TILE_DIM + threadIdx.x;
@@ -467,13 +604,32 @@ __global__ void ApproxGemmCudaKernel(int m, int n, int k,
 
          for (int n = 0; n < TILE_DIM; ++n)
          {
-             //value += T(As[threadIdx.y][n] * Bs[n][threadIdx.x]);
-             uint tableFetchIdx = (As[threadIdx.y][n] << 8) | Bs[n][threadIdx.x];
-             value += float(tex1Dfetch<ushort>(lookupTable, tableFetchIdx));
+            uint input = As[threadIdx.y][n];
+            if (inputSer > 0) if (curand_uniform(&localState[1]) < inputSer)
+                input ^= 1U << (curand(&localState[6]) % 8); 
+            if (inputNetworkSer > 0) if (curand_uniform(&localState[4]) < inputNetworkSer)
+                input ^= 1U << (curand(&localState[6]) % inputNetworkBits);
+
+            uint weight = Bs[n][threadIdx.x];
+            if (weightSer > 0) if (curand_uniform(&localState[0]) < weightSer)
+                weight ^= 1U << (curand(&localState[6]) % 8); 
+            if (weightNetworkSer > 0) if (curand_uniform(&localState[3]) < weightNetworkSer)
+                weight ^= 1U << (curand(&localState[6]) % weightNetworkBits);
+
+             uint tableFetchIdx = (input << 8) | weight;
+
+             ushort result = tex1Dfetch<ushort>(lookupTable, tableFetchIdx);
+             if (outputSer > 0) if (curand_uniform(&localState[2]) < outputSer)
+                result ^= 1U << (curand(&localState[6]) % 24);
+             if (outputNetworkSer > 0) if (curand_uniform(&localState[5]) < outputNetworkSer)
+                result ^= 1U << (curand(&localState[6]) % outputNetworkBits);  
+
+             value += float(result);
          }
 
          __syncthreads();
     }
+
 
     if (Row < m && Col < n)
     {
@@ -485,6 +641,11 @@ __global__ void ApproxGemmCudaKernel(int m, int n, int k,
         
         c[((blockIdx.y * blockDim.y  + threadIdx.y)*ldc) +
            (blockIdx.x * blockDim.x) + threadIdx.x] = value;
+    }
+
+    for (int i = 0; i < 7; i++) {
+       int stateId = i * totalThreads + threadId;
+       state[stateId] = localState[i];
     }
 }
 
@@ -625,5 +786,6 @@ __global__ void ApproxConvIm2ColCudaKernel(const T *in,
 }
 
 template struct ApproxConvIm2ColKernel<GPUDevice, float, uint8, TableApproxOpType_t>;
+
 
 #endif // GOOGLE_CUDA

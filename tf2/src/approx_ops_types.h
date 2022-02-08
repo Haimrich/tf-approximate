@@ -119,6 +119,10 @@ struct BaseTableApproxOpType_t {
         {
             OP_REQUIRES_OK(ctx, LoadLookupTable(ctx, tableFilename));
         }
+
+        OP_REQUIRES_OK(ctx, ctx->GetAttr("buffer_bers", &buffer_bers));
+        OP_REQUIRES_OK(ctx, ctx->GetAttr("network_bers", &network_bers));
+        OP_REQUIRES_OK(ctx, ctx->GetAttr("network_bits", &network_bits));
     }
 
     virtual ~BaseTableApproxOpType_t() {
@@ -220,6 +224,11 @@ struct BaseTableApproxOpType_t {
     int quantMin, quantMax;         ///< Min/Max of quantized value (0 - 2^8-1).
     OpQuantProps_t quantProps;      ///< Quantization properties of the inputs.
     std::vector<ATVT> lookupTable;  ///< Approximate OP lookup table data.
+
+    // ---
+    std::vector<float> buffer_bers;
+    std::vector<float> network_bers;
+    std::vector<int> network_bits;
 };
 
 #undef TF_REQUIRES
