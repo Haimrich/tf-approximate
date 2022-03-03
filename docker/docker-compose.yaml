@@ -1,0 +1,13 @@
+version: '3.8'
+
+services:
+  tfapprox:
+    image: tfapprox
+    build: 
+      context: .
+    volumes:
+      - ../:/app/tf-approximate/
+    stdin_open: true
+    tty: true
+    #user: "1003:1003"
+    runtime: nvidia
