@@ -367,17 +367,17 @@ void ApproxConvGEMMKernelCombined<GPUDevice, T, AT, TableApproxOpType_t>::operat
     RandomSetupKernel<<<gridSize, blockSize>>>(devStates, 123, totalThreads);
     //std::cout << "RANDOM Fatto. " << std::endl;
 
-    float weightSer = 1 - std::pow(1 - approxOp.buffer_bers[0], 8);
-    float inputSer = 1 - std::pow(1 - approxOp.buffer_bers[1], 8);
-    float outputSer = 1 - std::pow(1 - approxOp.buffer_bers[2], 24);
+    float weightSer = 1 - std::pow<double>(1 - (double)approxOp.fullBers[0], 8);
+    float inputSer = 1 - std::pow<double>(1 - (double)approxOp.fullBers[1], 8);
+    float outputSer = 1 - std::pow<double>(1 - (double)approxOp.fullBers[2], 24);
 
     int weightNetworkBits = approxOp.network_bits[0];
     int inputNetworkBits = approxOp.network_bits[1];
     int outputNetworkBits = approxOp.network_bits[2];
 
-    float weightNetworkSer = 1 - std::pow(1 - approxOp.network_bers[0], weightNetworkBits);
-    float inputNetworkSer = 1 - std::pow(1 - approxOp.network_bers[1], inputNetworkBits);
-    float outputNetworkSer = 1 - std::pow(1 - approxOp.network_bers[2], outputNetworkBits);
+    float weightNetworkSer = 1 - std::pow<double>(1 - (double)approxOp.partialBers[0], weightNetworkBits);
+    float inputNetworkSer = 1 - std::pow<double>(1 - (double)approxOp.partialBers[1], inputNetworkBits);
+    float outputNetworkSer = 1 - std::pow<double>(1 - (double)approxOp.partialBers[2], outputNetworkBits);
 
     ApproxGemmCudaKernelCombined<T, AT>
         <<<gridSize, blockSize, 0, d.stream()>>>(m, n, k, 
@@ -522,26 +522,26 @@ void ApproxConvGEMMKernel<Eigen::GpuDevice, T, AT, TableApproxOpType_t>::operato
     //std::cout << "TEX: " << approxOp.GetLookupData() << std::endl;
     
     const int totalThreads = blockSize.x  * blockSize.y * gridSize.x * gridSize.y;
-    std::cout << "THREADS: " << totalThreads << std::endl;
+    //std::cout << "THREADS: " << totalThreads << std::endl;
 
     // Random state init
     curandState* devStates;
     cudaMalloc((void **)&devStates, totalThreads * 7 * sizeof(curandState));
 
     RandomSetupKernel<<<gridSize, blockSize>>>(devStates, 123, totalThreads);
-    std::cout << "RANDOM Fatto. " << std::endl;
+    //std::cout << "RANDOM Fatto. " << std::endl;
 
-    float weightSer = 1 - std::pow(1 - approxOp.buffer_bers[0], 8);
-    float inputSer = 1 - std::pow(1 - approxOp.buffer_bers[1], 8);
-    float outputSer = 1 - std::pow(1 - approxOp.buffer_bers[2], 24);
+    float weightSer = 1 - std::pow<double>(1 - (double)approxOp.fullBers[0], 8);
+    float inputSer = 1 - std::pow<double>(1 - (double)approxOp.fullBers[1], 8);
+    float outputSer = 1 - std::pow<double>(1 - (double)approxOp.fullBers[2], 24);
 
     int weightNetworkBits = approxOp.network_bits[0];
     int inputNetworkBits = approxOp.network_bits[1];
     int outputNetworkBits = approxOp.network_bits[2];
 
-    float weightNetworkSer = 1 - std::pow(1 - approxOp.network_bers[0], weightNetworkBits);
-    float inputNetworkSer = 1 - std::pow(1 - approxOp.network_bers[1], inputNetworkBits);
-    float outputNetworkSer = 1 - std::pow(1 - approxOp.network_bers[2], outputNetworkBits);
+    float weightNetworkSer = 1 - std::pow<double>(1 - (double)approxOp.partialBers[0], weightNetworkBits);
+    float inputNetworkSer = 1 - std::pow<double>(1 - (double)approxOp.partialBers[1], inputNetworkBits);
+    float outputNetworkSer = 1 - std::pow<double>(1 - (double)approxOp.partialBers[2], outputNetworkBits);
     
      ApproxGemmCudaKernel<T, AT>
         <<<gridSize, blockSize, 0, d.stream()>>>(m, n, k, 

@@ -9,6 +9,13 @@
 cmake_minimum_required(VERSION 3.1)
 project(ApproxGPUOpsTF)
 
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+set(CMAKE_CXX_FLAGS_DEBUG "-w -g")
+set(CMAKE_CXX_FLAGS_RELEASE "-w -O3")
+
 # Appends the cmake/modules path to MAKE_MODULE_PATH variable.
 set(CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules ${CMAKE_MODULE_PATH})
 

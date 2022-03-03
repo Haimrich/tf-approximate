@@ -49,10 +49,15 @@ y_train = y_train[:-10000]
 # Define our approximate model architecture
 # NOTE: Conv2D layers are replaced with our FakeApproxConv2D which simulates convolutional layer with approximate
 #       8bit fixed-point multiplication.
+
+# *(Weight, Input, Output)
+
 approx_model = tf.keras.Sequential([
-    FakeApproxConv2D(filters=6, kernel_size=(3, 3), activation='relu', mul_map_file=args.mtab_file),
+    FakeApproxConv2D(filters=6, kernel_size=(3, 3), activation='relu', mul_map_file=args.mtab_file,
+        full_bers=(1e-5, 1e-5, 1e-5), partial_bers=(1e-5, 1e-5, 1e-5), full_bits=(2,2,2)),
     tf.keras.layers.AveragePooling2D(),
-    FakeApproxConv2D(filters=16, kernel_size=(3, 3), activation='relu', mul_map_file=args.mtab_file),
+    FakeApproxConv2D(filters=16, kernel_size=(3, 3), activation='relu', mul_map_file=args.mtab_file,
+        full_bers=(1e-5, 1e-5, 1e-5), partial_bers=(1e-5, 1e-5, 1e-5), full_bits=(2,2,2)),
     tf.keras.layers.Flatten(),
     tf.keras.layers.Dense(120, activation='relu'),
     tf.keras.layers.Dense(84, activation='relu'),

@@ -534,7 +534,7 @@ void LaunchApproxConv2DOp<GPUDevice, T, AT, ApproxOpType>::operator()(OpKernelCo
 
     // Upload lookup table to the GPU and create 1D texture for lookups
 
-
+    #if false // Bugged
     if(patchRows == 1 && patchCols == 1 && !isGroupedConvolution &&
             rowDilation == 1 && colDilation == 1 && rowStride == 1 &&
             colStride == 1 && dataFormat == FORMAT_NHWC &&
@@ -578,6 +578,7 @@ void LaunchApproxConv2DOp<GPUDevice, T, AT, ApproxOpType>::operator()(OpKernelCo
         return;
     }
     else
+    #endif
     {
         const int64 kMaxChunkSize = (16 * 1024 * 1024) / sizeof(T);
         int64 patchLength  = filter.dim_size(0) * filter.dim_size(1) * filter.dim_size(2);

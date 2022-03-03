@@ -33,7 +33,7 @@ foreach(CUDA_SM ${TFAPPROX_CUDA_ARCHS})
 endforeach()
 
 add_definitions(-DGOOGLE_CUDA=1 -DNDEBUG)
-set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} --expt-relaxed-constexpr ${TF_CXXFLAGS} -Xcompiler -fPIC")
+set(CUDA_NVCC_FLAGS "${CUDA_NVCC_FLAGS} --expt-relaxed-constexpr ${TF_CXXFLAGS} -Xcompiler -fPIC -lcurand")
 
 set(CMAKE_CXX_STANDARD 11)
 cuda_add_library(cuda_gpu_backend ${SRCS_LIST} ${HEADERS_LIST})

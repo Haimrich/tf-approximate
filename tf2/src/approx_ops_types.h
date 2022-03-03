@@ -120,9 +120,9 @@ struct BaseTableApproxOpType_t {
             OP_REQUIRES_OK(ctx, LoadLookupTable(ctx, tableFilename));
         }
 
-        OP_REQUIRES_OK(ctx, ctx->GetAttr("buffer_bers", &buffer_bers));
-        OP_REQUIRES_OK(ctx, ctx->GetAttr("network_bers", &network_bers));
-        OP_REQUIRES_OK(ctx, ctx->GetAttr("network_bits", &network_bits));
+        OP_REQUIRES_OK(ctx, ctx->GetAttr("full_bers", &fullBers));
+        OP_REQUIRES_OK(ctx, ctx->GetAttr("partial_bers", &partialBers));
+        OP_REQUIRES_OK(ctx, ctx->GetAttr("partial_bits", &partialBits));
     }
 
     virtual ~BaseTableApproxOpType_t() {
@@ -226,9 +226,9 @@ struct BaseTableApproxOpType_t {
     std::vector<ATVT> lookupTable;  ///< Approximate OP lookup table data.
 
     // ---
-    std::vector<float> buffer_bers;
-    std::vector<float> network_bers;
-    std::vector<int> network_bits;
+    std::vector<float> fullBers;
+    std::vector<float> partialBers;
+    std::vector<int> partialBits;
 };
 
 #undef TF_REQUIRES
