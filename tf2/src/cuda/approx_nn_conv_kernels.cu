@@ -371,9 +371,9 @@ void ApproxConvGEMMKernelCombined<GPUDevice, T, AT, TableApproxOpType_t>::operat
     float inputSer = 1 - std::pow<double>(1 - (double)approxOp.fullBers[1], 8);
     float outputSer = 1 - std::pow<double>(1 - (double)approxOp.fullBers[2], 24);
 
-    int weightNetworkBits = approxOp.network_bits[0];
-    int inputNetworkBits = approxOp.network_bits[1];
-    int outputNetworkBits = approxOp.network_bits[2];
+    int weightNetworkBits = approxOp.partialBits[0];
+    int inputNetworkBits = approxOp.partialBits[1];
+    int outputNetworkBits = approxOp.partialBits[2];
 
     float weightNetworkSer = 1 - std::pow<double>(1 - (double)approxOp.partialBers[0], weightNetworkBits);
     float inputNetworkSer = 1 - std::pow<double>(1 - (double)approxOp.partialBers[1], inputNetworkBits);
@@ -535,9 +535,9 @@ void ApproxConvGEMMKernel<Eigen::GpuDevice, T, AT, TableApproxOpType_t>::operato
     float inputSer = 1 - std::pow<double>(1 - (double)approxOp.fullBers[1], 8);
     float outputSer = 1 - std::pow<double>(1 - (double)approxOp.fullBers[2], 24);
 
-    int weightNetworkBits = approxOp.network_bits[0];
-    int inputNetworkBits = approxOp.network_bits[1];
-    int outputNetworkBits = approxOp.network_bits[2];
+    int weightNetworkBits = approxOp.partialBits[0];
+    int inputNetworkBits = approxOp.partialBits[1];
+    int outputNetworkBits = approxOp.partialBits[2];
 
     float weightNetworkSer = 1 - std::pow<double>(1 - (double)approxOp.partialBers[0], weightNetworkBits);
     float inputNetworkSer = 1 - std::pow<double>(1 - (double)approxOp.partialBers[1], inputNetworkBits);
